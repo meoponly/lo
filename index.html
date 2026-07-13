@@ -4564,7 +4564,10 @@ function openPlayer(vid, title, channel, chId){
   // URL routing + tab title
   _prevPageTitle = document.title;
   document.title = (title || 'Video') + ' - Ewtube';
-  history.pushState({ ewtubePlayer: vid }, '', '?v=' + encodeURIComponent(vid));
+  const targetUrl = '?v=' + encodeURIComponent(vid);
+  const currentV = new URLSearchParams(location.search).get('v');
+  if(currentV === vid) history.replaceState({ ewtubePlayer: vid }, '', targetUrl);
+  else history.pushState({ ewtubePlayer: vid }, '', targetUrl);
 
   // Load YT IFrame API if not already loaded
   if(window.YT?.Player){
@@ -4623,7 +4626,16 @@ function closePlayer(){
 
   // Restore URL + title
   document.title = _prevPageTitle || 'Ewtube';
-  if(history.state?.ewtubePlayer) history.back();
+  if(history.state?.ewtubePlayer){
+    // If the previous page title is still the default, user likely opened
+    // the video URL directly — there's no app page to go back to.
+    // Use replaceState to go to home instead of history.back().
+    if(!_prevPageTitle || _prevPageTitle === 'Ewtube'){
+      history.replaceState(null, '', location.pathname);
+    } else {
+      history.back();
+    }
+  }
 
   // Refresh progress bars on cards now that we saved progress
   _refreshVisibleProgressBars();
@@ -4681,11 +4693,7 @@ window.addEventListener('popstate', e=>{
   }
 });
 
-// Open from URL on page load
-document.addEventListener('DOMContentLoaded', ()=>{
-  const params = new URLSearchParams(location.search);
-  if(params.has('v')) openPlayer(params.get('v'), '', '', '');
-});
+// Video URL on page load is now handled by navigateToQuery() in initSetup()
 
 // Escape closes player
 document.addEventListener('keydown', e=>{
@@ -7276,9 +7284,24 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCtx();hideNewP
 // ── URL QUERY-PARAM ROUTER (YouTube-style) ──
 function navigateToQuery(){
   const p=new URLSearchParams(location.search);
-  const q=p.get('q'),channel=p.get('channel'),page=p.get('page'),modal=p.get('modal'),pl=p.get('pl');
+  const v=p.get('v'),q=p.get('q'),channel=p.get('channel'),page=p.get('page'),modal=p.get('modal'),pl=p.get('pl');
   // Close any open modals first
   document.getElementById('settings-modal').style.display='none';
+  // Handle direct video link (?v=...)
+  if(v){
+    // Show home in the background without touching the URL
+    currentSection='search';
+    ['search-section','history-section','myplaylists-section','watchlater-section'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.style.display='none';
+    });
+    document.getElementById('channel-page').style.display='none';
+    document.getElementById('search-section').style.display='block';
+    document.getElementById('home-feed-wrap').style.display='block';
+    document.getElementById('search-results-wrap').style.display='none';
+    // Open player overlay — use setTimeout to ensure DOM is ready
+    setTimeout(()=>openPlayer(v,'','',''),0);
+    return;
+  }
   if(modal==='settings'){openSettings();return;}
   if(q){
     const qi=document.getElementById('q');
